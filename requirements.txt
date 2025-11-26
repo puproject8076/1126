@@ -1,0 +1,30 @@
+# === Flask Web Framework ===
+Flask==3.0.3
+Flask-CORS==5.0.0
+
+# === Firebase ===
+firebase-admin==6.5.0
+
+# === LLM / Groq API ===
+groq==0.11.0
+requests==2.32.3
+
+# === OCR：ddddocr ===
+# Python 3.8~3.11 用 1.4.11（支援最完整）
+# Python 3.12+ 目前只能用舊版 1.3.7（新版還沒出 wheel）
+ddddocr==1.4.11; python_version<"3.12"
+ddddocr==1.3.7;  python_version>="3.12"
+
+# === Playwright（自動抓 Chromium）===
+playwright==1.48.0
+# 注意：部署完後一定要再執行一次：
+# playwright install chromium
+
+# === Excel 匯出 ===
+openpyxl==3.1.5
+
+# === 時區處理 ===
+pytz==2024.2
+
+# === 生產環境建議（Render / Railway / Fly.io / Heroku 等）===
+gunicorn==23.0.0
