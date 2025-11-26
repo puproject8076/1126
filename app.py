@@ -16,30 +16,7 @@ from datetime import datetime
 from flask import Flask, request, jsonify
 import requests
 import pytz
-
-# 先嘗試導入 Groq，如果失敗則使用模擬客戶端
-try:
-    from groq import Groq
-    GROQ_AVAILABLE = True
-except ImportError as e:
-    print(f"Groq 導入失敗: {e}")
-    GROQ_AVAILABLE = False
-
-# 如果 Groq 不可用，創建模擬客戶端
-if not GROQ_AVAILABLE:
-    class MockGroqClient:
-        def chat(self, **kwargs):
-            return type('obj', (object,), {
-                'choices': [
-                    type('obj', (object,), {
-                        'message': type('obj', (object,), {
-                            'content': "Groq服務暫時不可用，請檢查依賴版本或API密鑰"
-                        })
-                    })
-                ]
-            })()
-    
-    Groq = MockGroqClient
+from groq import Groq
 
 model="openai/gpt-oss-120b"
 
@@ -60,86 +37,47 @@ def is_valid_password(password):
 def is_valid_email(email):
     return re.match(r"[^@]+@[^@]+\.[^@]+", email)
 
+
 def products_type(_type, date):
-    try:
-        # 如果 Groq 不可用，返回默認分類
-        if not GROQ_AVAILABLE:
-            return '其他'
-            
-        conversation_history = [
-            {
-                "role": "user",
-                "content": f"""你是一位商品分類專家，請幫我將以下商品名稱分類為下列其中之一：
-                『食品』『飲料』『交通』『書籍』『寵物』，如果不在這些範圍內就是『其他』。
-                請只回覆分類名稱，不要加註解。
+    conversation_history = [
+        {
+            "role": "user",
+            "content": f"""你是一位商品分類專家，請幫我將以下商品名稱分類為下列其中之一：
+            『食品』『飲料』『交通』『書籍』『寵物』，如果不在這些範圍內就是『其他』。
+            請只回覆分類名稱，不要加註解。
 
-                商品名稱：""" + _type,
-            }
-        ]
+            商品名稱：""" + _type,
+        }
+    ]
 
-        # 與模型進行第一次對話
-        chat_completion = client.chat.completions.create(
-            messages=conversation_history,
-            model='llama-3.3-70b-versatile',
-        )
+    # 與模型進行第一次對話
+    chat_completion = client.chat.completions.create(
+        messages=conversation_history,
+        model='llama-3.3-70b-versatile',
+    )
 
-        # 獲取回應內容
-        response_content = chat_completion.choices[0].message.content
+    # 獲取回應內容
+    response_content = chat_completion.choices[0].message.content
 
-        if (response_content == '食品'):
-            if (date[-8] != '0'):
-                time = int(date[-8:-6])
-                if (time < 11):
-                    response_content = '早餐'
-                elif (time < 15):
-                    response_content = '午餐'
-                else:
-                    response_content = '晚餐'
+    if (response_content == '食品'):
+        if (date[-8] != 0):
+            time = int(date[-8:-6])
+            if (time < 11):
+                response_content = '早餐'
+            elif (time < 15):
+                response_content = '午餐'
             else:
-                if (int(date[-9]) > 5):
-                    response_content = '早餐'
-                else:
-                    response_content = '宵夜'
-
-        return response_content
-    except Exception as e:
-        print(f"商品分類錯誤: {e}")
-        return '其他'
-
-# 初始化 Groq 客戶端（帶錯誤處理）
-def initialize_groq_client():
-    try:
-        # 方法1：嘗試不帶額外參數初始化
-        client = Groq(api_key=GROQ_API_KEY)
-        print("Groq 客戶端初始化成功")
-        return client
-    except TypeError as e:
-        if "proxies" in str(e):
-            print("檢測到 proxies 參數問題，嘗試替代方案...")
-            try:
-                # 方法2：嘗試使用環境變量
-                import os
-                os.environ['GROQ_API_KEY'] = GROQ_API_KEY
-                client = Groq()
-                print("Groq 客戶端通過環境變量初始化成功")
-                return client
-            except Exception as e2:
-                print(f"環境變量方法也失敗: {e2}")
-                # 方法3：返回模擬客戶端
-                print("使用模擬 Groq 客戶端")
-                return MockGroqClient()
+                response_content = '晚餐'
         else:
-            print(f"其他初始化錯誤: {e}")
-            return MockGroqClient()
-    except Exception as e:
-        print(f"Groq 初始化失敗: {e}")
-        return MockGroqClient()
 
-# 初始化客戶端
-client = initialize_groq_client()
+            if (int(date[-9]) > 5):
+                response_content = '早餐'
+            else:
+                response_content = '宵夜'
 
-# 其餘的程式碼保持不變...
-# [其餘的 route 和函數保持原樣]
+    return response_content
+
+
 
 # otp_store = {}  # 暫存 OTP 驗證碼
 
@@ -160,6 +98,49 @@ client = initialize_groq_client()
 #     print(f"[OTP] 已發送到 {email}: {otp}")  # 測試用印出
 
 #     return jsonify({'message': '驗證碼已發送，請在 5 分鐘內輸入'}), 200
+
+
+# @app.route('/verify_otp', methods=['POST'])
+# def verify_otp():
+#     data = request.get_json()
+#     email = data.get('email')
+#     otp = data.get('otp')
+
+#     if not email or not otp:
+#         return jsonify({'error': '缺少 email 或 otp'}), 400
+
+#     record = otp_store.get(email)
+#     if not record:
+#         return jsonify({'error': '未發送驗證碼或已過期'}), 400
+
+#     if datetime.utcnow() > record['expire']:
+#         otp_store.pop(email, None)
+#         return jsonify({'error': '驗證碼已過期'}), 400
+
+#     if record['otp'] != otp:
+#         return jsonify({'error': '驗證碼錯誤'}), 400
+
+#     return jsonify({'message': '驗證成功'}), 200
+
+
+# @app.route('/reset_password', methods=['POST'])
+# def reset_password():
+#     data = request.get_json()
+#     email = data.get('email')
+#     new_password = data.get('new_password')
+
+#     if not email or not new_password:
+#         return jsonify({'error': '缺少必要欄位'}), 400
+
+#     try:
+#         user = auth.get_user_by_email(email)
+#         auth.update_user(user.uid, password=new_password)
+#         return jsonify({'message': '密碼已成功重設'}), 200
+#     except Exception as e:
+#         return jsonify({'error': f'重設密碼失敗: {str(e)}'}), 400
+
+
+
 
 @app.route('/google_login', methods=['POST'])
 def google_login():
@@ -189,6 +170,10 @@ def google_login():
         print("Google login error:", e)
         return jsonify({'error': str(e)}), 400
 
+
+
+
+
 @app.route('/record_transaction', methods=['POST'])
 def record_transaction():
     try:
@@ -209,6 +194,7 @@ def record_transaction():
         amount = float(data.get('金額'))
         note = data.get('備註')
         user_id = data.get('user_id')
+
 
         # 寫入 Firestore
         doc_ref = db.collection('transactions').document()
@@ -367,6 +353,7 @@ def save_financial_goal():
         # 捕捉其他錯誤，回傳 400
         return jsonify({'error': str(e)}), 400
 
+
 @app.route('/get_financial_goals', methods=['POST'])
 def get_financial_goals():
     try:
@@ -475,6 +462,9 @@ def clear_all_saving_goals():
         print(f"清空儲蓄目標失敗: {str(e)}")
         return jsonify({'error': str(e)}), 400
 
+# 初始化 Groq 客戶端
+client = Groq(api_key=GROQ_API_KEY)
+
 # 角色 prompt
 role_prompts = {
     "狐狸": "請用機智、靈活、帶點狡猾感的語氣回覆，回覆的最後要加上“呵呵~”，像狐狸般聰明、擅長制定策略。投資型態偏向『積極型』，善於捕捉市場波動、靈活調整投資組合，但仍以專業且合理的金融知識回答問題。",
@@ -523,144 +513,269 @@ def chat():
     rag_text, chat_history_rag = call_rag_space(user_message, chat_history_rag)
 
     # -------- 3. GPT prompt：一次完成 RAG + 角色語氣 + 繁體中文回答 --------
-    try:
-        conversation_history = [
-            {
-                "role": "user",
-                "content": (
-                    f"{role_prompt} 根據以下資訊回答問題，"
-                    f"保持簡短明確並使用繁體中文：\n\n{rag_text}\n\n問題：{user_message}"
-                )
-            }
-        ]
+    conversation_history = [
+        {
+            "role": "user",
+            "content": (
+                f"{role_prompt} 根據以下資訊回答問題，"
+                f"保持簡短明確並使用繁體中文：\n\n{rag_text}\n\n問題：{user_message}"
+            )
+        }
+    ]
 
-        chat_completion = client.chat.completions.create(
-            messages=conversation_history,
-            model=model,
-        )
-        response_content = chat_completion.choices[0].message.content
-    except Exception as e:
-        print(f"Groq API 呼叫失敗: {e}")
-        response_content = f"抱歉，目前無法提供AI回應。錯誤: {str(e)}"
+    chat_completion = client.chat.completions.create(
+        messages=conversation_history,
+        model=model,
+    )
+    response_content = chat_completion.choices[0].message.content
 
     # -------- 4. 儲存對話紀錄 --------
-    try:
-        user_ref = db.collection('chat').document(user_id)
-        user_ref.set({
-            'user_id': user_id,
-            'conversation': firestore.ArrayUnion([{
-                "timestamp": datetime.now(pytz.timezone('Asia/Taipei')),
-                "user_message": user_message,
-                "rag_context": rag_text,
-                "bot_response": response_content,
-                "role": selected_role
-            }])
-        }, merge=True)
-    except Exception as e:
-        print(f"儲存對話紀錄失敗: {e}")
+    user_ref = db.collection('chat').document(user_id)
+    user_ref.set({
+        'user_id': user_id,
+        'conversation': firestore.ArrayUnion([{
+            "timestamp": datetime.now(pytz.timezone('Asia/Taipei')),
+            "user_message": user_message,
+            "rag_context": rag_text,
+            "bot_response": response_content,
+            "role": selected_role
+        }])
+    }, merge=True)
 
     # -------- 5. 返回最終繁體中文答案 --------
     return jsonify({'response': response_content})
 
+
+
 @app.route('/process_invoice', methods=['POST'])
 def process_invoice():
     try:
-        data = request.get_json()
-        print(f"收到的發票數據: {data}")
-        
+        data = request.get_json()  # 接收來自前端的資料
         invoice_number1 = data.get('invoice_number')
         purchase_date1 = data.get('purchase_date')
         random_code1 = data.get('random_code')
         user_id = data.get('user_id', 'unknown_user')
-        
-        print(f"收到發票處理請求 - 發票號碼: {invoice_number1}, 用戶: {user_id}")
+        print(user_id)
+        print("發票號碼: "+invoice_number1)
 
-        # 基本驗證
-        if not all([invoice_number1, purchase_date1, random_code1]):
-            error_msg = "缺少必要的發票信息"
-            print(error_msg)
-            return jsonify({"status": "error", "message": error_msg}), 400
+        invoice_detail = []
 
-        # 檢查 Playwright 是否可用
-        try:
-            from playwright.sync_api import sync_playwright
-        except ImportError as e:
-            error_msg = f"Playwright 不可用: {e}"
-            print(error_msg)
-            return jsonify({"status": "error", "message": "發票掃描功能暫時不可用"}), 400
+        uid = str(uuid.uuid4())
+        path = uid + "_captcha.png"
 
-        # 由於 Render 環境限制，提供模擬功能
-        return handle_invoice_simulation(invoice_number1, purchase_date1, random_code1, user_id)
+        MAX_RETRIES = 20
+        RETRY_INTERVAL = 0.0001
 
-    except Exception as e:
-        error_msg = f"發票處理整體錯誤：{e}"
-        print(error_msg)
-        return jsonify({"status": "error", "message": f"系統錯誤: {str(e)}"}), 500
+        invoice_number = invoice_number1.replace('-','')
+        random_code = random_code1
+        date_str = purchase_date1
+        date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+        full_date_str = date_obj.strftime("%a %b %d %Y")  # e.g., Fri Mar 27 2025
 
-def handle_invoice_simulation(invoice_number, purchase_date, random_code, user_id):
-    """處理發票模擬（用於雲端環境）"""
-    try:
-        print("使用發票模擬模式")
-        
-        # 模擬發票數據
-        mock_invoice_data = {
-            '發票日期': f"{purchase_date} 12:00:00",
-            '店家': '模擬商家 - 雲端測試',
-            '購買商品': [
-                "品名: 測試商品A\n金額: 150\n\n",
-                "品名: 測試商品B\n金額: 80\n\n",
-                "品名: 測試商品C\n金額: 200\n\n"
-            ],
-            '總花費': '430',
-            'user_id': user_id,
-        }
-
-        # 儲存到 Firestore
-        doc_ref = db.collection('invoice').document()
-        doc_ref.set(mock_invoice_data)
-        print("發票數據已保存到 Firestore")
-
-        # 添加到交易記錄
-        transactions_added = 0
-        products = [
-            {"name": "測試商品A", "amount": 150, "type": "食品"},
-            {"name": "測試商品B", "amount": 80, "type": "飲料"}, 
-            {"name": "測試商品C", "amount": 200, "type": "其他"}
-        ]
-
-        for product in products:
+        @contextlib.contextmanager
+        def suppress_stdout():
             try:
-                transaction_ref = db.collection('transactions').document()
-                transaction_ref.set({
-                    '類型': "支出",
-                    '日期': purchase_date,
-                    '類別': product['type'],
-                    '金額': product['amount'],
-                    '備註': f"{product['name']}(發票模擬)",
-                    'user_id': user_id,
-                })
-                transactions_added += 1
+                original_stdout = sys.stdout
+                sys.stdout = open(os.devnull, "w", encoding='utf-8')
+                yield
+            finally:
+                sys.stdout.close()
+                sys.stdout = original_stdout
+
+        def solve_captcha_with_ocr(page) -> bool:
+            try:
+                captcha_image = page.locator('img[alt="圖形驗證碼"]')
+                captcha_image.wait_for(state="visible", timeout=5000)
+
+                box = captcha_image.bounding_box()
+                if not box:
+                    print("無法獲得驗證碼圖片尺寸")
+                    return False
+
+                width = box['width']
+                height = box['height']
+                if abs(width - 150) > 10 or abs(height - 40) > 10:
+                    print(f"圖形驗證碼尺寸異常：{width:.0f}x{height:.0f}")
+                    return False
+
+                captcha_image.screenshot(path=path)
+                print(f"驗證碼圖片擷取成功：{width:.0f}x{height:.0f}，檔名 {path}")
+                return True
+
             except Exception as e:
-                print(f"添加交易記錄失敗: {e}")
+                print("擷取驗證碼圖片失敗：", e)
+                return False
 
-        print(f"成功添加 {transactions_added} 筆交易記錄")
+        def out_result() -> str:
+            with suppress_stdout():
+                ocr = ddddocr.DdddOcr()
+            with open(path, "rb") as f:
+                img_bytes = f.read()
+            result = ocr.classification(img_bytes)
+            return result.strip()
 
-        return jsonify({
-            "status": "success", 
-            "message": "發票模擬處理成功（雲端測試模式）",
-            "data": {
-                "發票號碼": invoice_number,
-                "日期": purchase_date,
-                "總金額": 430,
-                "商品數量": 3,
-                "模式": "模擬測試"
-            }
-        }), 200
+        def fill_invoice_info(page):
+            page.goto("https://www.einvoice.nat.gov.tw/portal/btc/audit/btc601w/search")
+
+            today = datetime.today()
+            year_diff = today.year - date_obj.year
+            month_diff = today.month - date_obj.month
+
+            page.get_by_role("textbox", name="發票號碼").click()
+            page.get_by_role("textbox", name="發票號碼").fill(invoice_number)
+
+            page.locator("[data-test=\"dp-input\"]").click()
+
+            while month_diff:
+                page.get_by_role("button", name="上個月").click()
+                month_diff -= 1
+
+            if year_diff != 0:
+                page.locator("[data-test=\"year-toggle-overlay-0\"]").click()
+                page.get_by_text(f"{date_obj.year}年").click()
+
+            page.locator(f"[data-test=\"{full_date_str} 00\\:00\\:00 GMT\\+0800 \\(台北標準時間\\)\"]").get_by_text(
+                f"{date_obj.day}").click()
+
+            page.get_by_role("textbox", name="位隨機碼").click()
+            page.get_by_role("textbox", name="位隨機碼").fill(random_code)
+
+        def try_full_process_with_retry(page):
+            for attempt in range(MAX_RETRIES):
+                print(f"\n[第 {attempt + 1} 次嘗試]")
+
+                try:
+                    fill_invoice_info(page)
+
+                    page.get_by_role("textbox", name="圖形驗證碼").click()
+                    if not solve_captcha_with_ocr(page):
+                        raise ValueError("驗證碼擷取失敗")
+
+                    captcha_result = out_result()
+                    if captcha_result.isdigit() and len(captcha_result) == 5:
+                        page.get_by_role("textbox", name="圖形驗證碼").fill(captcha_result)
+                        print(f"成功輸入驗證碼: {captcha_result}")
+
+                        page.get_by_role("button", name="查詢").click()
+                        page.wait_for_selector("table", timeout=5000)
+
+                        # 開啟詳細資料
+                        page.get_by_role("dialog").locator("div").filter(
+                            has_text=re.compile(f"^{invoice_number}$")).click()
+
+                        rows = page.locator("table tbody tr")
+                        for i in range(rows.count()):
+                            row = rows.nth(i)
+                            cells = row.locator("td")
+                            raw_texts = cells.all_inner_texts()
+                            clean_texts = [text.strip().replace('\xa0', '') for text in raw_texts]
+                            if not any(clean_texts):
+                                continue
+                            invoice_detail.append(clean_texts)
+                            # print(f"第 {i + 1} 列資料：{clean_texts}")
+                        return True
+
+                    else:
+                        print(f"驗證碼格式錯誤（{captcha_result}），重試中...")
+                        time.sleep(RETRY_INTERVAL)
+                        page.reload()
+
+                except Exception as e:
+                    print("流程中出現錯誤，將重新整理頁面再試一次：", e)
+                    time.sleep(RETRY_INTERVAL)
+                    page.reload()
+
+            print("\n超過最大重試次數，結束程序")
+            return False
+
+
+
+        def run(playwright: Playwright) -> None:
+            browser = playwright.chromium.launch(
+                headless=False,
+                args=["--window-position=-2000,0"]
+            )
+            context = browser.new_context()
+            page = context.new_page()
+
+            success = try_full_process_with_retry(page)
+
+            if not success:
+                print("無法成功查詢發票資訊。")
+
+            context.close()
+            browser.close()
+            items = invoice_detail[1:-1]
+
+            total = 0
+            products = []
+            for item in items:
+                total += int(item[3])
+                products.append(f"品名:\n{item[0]} \n金額: {item[3]}\n\n")
+
+
+            date = invoice_detail[0][0]
+            company = invoice_detail[0][4]
+            total = str(total)
+
+
+            # 上傳資料庫
+            db = firestore.client()
+
+            doc_ref = db.collection('invoice').document()
+            doc_ref.set({
+                '發票日期': date,
+                '店家': company,
+                '購買商品': products,
+                '總花費': total,
+                'user_id': user_id,
+            })
+
+            print(f'發票資訊已上傳資料庫')
+
+            _type = products_type(item[0], date)
+            dt = datetime.strptime(date, "%Y年%m月%d日 %H:%M:%S")
+            date = dt.strftime("%Y-%m-%d")
+
+            for item in items:
+
+                if(int(item[3])<0):
+                    # 加到記帳資料庫
+                    doc_ref = db.collection('transactions').document()
+                    doc_ref.set({
+                        '類型': "收入",
+                        '日期': date,
+                        '類別': '其他',
+                        '金額': int(item[3]),
+                        '備註': f'{item[0]} 以發票掃描存入',
+                        'user_id': user_id,
+                    })
+
+                else :
+                    # 加到記帳資料庫
+                    doc_ref = db.collection('transactions').document()
+                    doc_ref.set({
+                        '類型': "支出",
+                        '日期': date,
+                        '類別': _type,
+                        '金額': int(item[3]),
+                        '備註': f'{item[0]}(發票)',
+                        'user_id': user_id,
+                    })
+                    print('發票已存入記帳資料庫')
+
+
+
+        with sync_playwright() as playwright:
+            run(playwright)
+
+        # print('回傳給flutter')
+        return jsonify({"status": "success", "message": "success"}), 200
 
     except Exception as e:
-        error_msg = f"發票模擬處理失敗: {e}"
-        print(error_msg)
-        return jsonify({"status": "error", "message": error_msg}), 500
+        # 捕捉錯誤以利除錯
+        print(f"錯誤：{e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/get_invoices', methods=['POST'])
 def get_invoices():
@@ -722,31 +837,5 @@ def export_transactions():
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
-@app.route('/')
-def health_check():
-    return jsonify({
-        'status': 'healthy', 
-        'message': '服務運行正常',
-        'timestamp': datetime.now(pytz.timezone('Asia/Taipei')).isoformat()
-    })
-
-@app.route('/check_api_keys', methods=['GET'])
-def check_api_keys():
-    """檢查 API 金鑰狀態"""
-    groq_status = "有效" if not isinstance(client, MockGroqClient) else "無效/未設置"
-    groq_key_length = len(GROQ_API_KEY) if GROQ_API_KEY else 0
-    
-    return jsonify({
-        'groq_api_key': {
-            'status': groq_status,
-            'length': groq_key_length,
-            'set': bool(GROQ_API_KEY)
-        },
-        'firebase': '已初始化',
-        'timestamp': datetime.now(pytz.timezone('Asia/Taipei')).isoformat()
-    })
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
-
-
