@@ -16,7 +16,30 @@ from datetime import datetime
 from flask import Flask, request, jsonify
 import requests
 import pytz
-from groq import Groq
+
+# 先嘗試導入 Groq，如果失敗則使用模擬客戶端
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+except ImportError as e:
+    print(f"Groq 導入失敗: {e}")
+    GROQ_AVAILABLE = False
+
+# 如果 Groq 不可用，創建模擬客戶端
+if not GROQ_AVAILABLE:
+    class MockGroqClient:
+        def chat(self, **kwargs):
+            return type('obj', (object,), {
+                'choices': [
+                    type('obj', (object,), {
+                        'message': type('obj', (object,), {
+                            'content': "Groq服務暫時不可用，請檢查依賴版本或API密鑰"
+                        })
+                    })
+                ]
+            })()
+    
+    Groq = MockGroqClient
 
 model="openai/gpt-oss-120b"
 
@@ -37,47 +60,86 @@ def is_valid_password(password):
 def is_valid_email(email):
     return re.match(r"[^@]+@[^@]+\.[^@]+", email)
 
-
 def products_type(_type, date):
-    conversation_history = [
-        {
-            "role": "user",
-            "content": f"""你是一位商品分類專家，請幫我將以下商品名稱分類為下列其中之一：
-            『食品』『飲料』『交通』『書籍』『寵物』，如果不在這些範圍內就是『其他』。
-            請只回覆分類名稱，不要加註解。
+    try:
+        # 如果 Groq 不可用，返回默認分類
+        if not GROQ_AVAILABLE:
+            return '其他'
+            
+        conversation_history = [
+            {
+                "role": "user",
+                "content": f"""你是一位商品分類專家，請幫我將以下商品名稱分類為下列其中之一：
+                『食品』『飲料』『交通』『書籍』『寵物』，如果不在這些範圍內就是『其他』。
+                請只回覆分類名稱，不要加註解。
 
-            商品名稱：""" + _type,
-        }
-    ]
+                商品名稱：""" + _type,
+            }
+        ]
 
-    # 與模型進行第一次對話
-    chat_completion = client.chat.completions.create(
-        messages=conversation_history,
-        model='llama-3.3-70b-versatile',
-    )
+        # 與模型進行第一次對話
+        chat_completion = client.chat.completions.create(
+            messages=conversation_history,
+            model='llama-3.3-70b-versatile',
+        )
 
-    # 獲取回應內容
-    response_content = chat_completion.choices[0].message.content
+        # 獲取回應內容
+        response_content = chat_completion.choices[0].message.content
 
-    if (response_content == '食品'):
-        if (date[-8] != 0):
-            time = int(date[-8:-6])
-            if (time < 11):
-                response_content = '早餐'
-            elif (time < 15):
-                response_content = '午餐'
+        if (response_content == '食品'):
+            if (date[-8] != '0'):
+                time = int(date[-8:-6])
+                if (time < 11):
+                    response_content = '早餐'
+                elif (time < 15):
+                    response_content = '午餐'
+                else:
+                    response_content = '晚餐'
             else:
-                response_content = '晚餐'
+                if (int(date[-9]) > 5):
+                    response_content = '早餐'
+                else:
+                    response_content = '宵夜'
+
+        return response_content
+    except Exception as e:
+        print(f"商品分類錯誤: {e}")
+        return '其他'
+
+# 初始化 Groq 客戶端（帶錯誤處理）
+def initialize_groq_client():
+    try:
+        # 方法1：嘗試不帶額外參數初始化
+        client = Groq(api_key=GROQ_API_KEY)
+        print("Groq 客戶端初始化成功")
+        return client
+    except TypeError as e:
+        if "proxies" in str(e):
+            print("檢測到 proxies 參數問題，嘗試替代方案...")
+            try:
+                # 方法2：嘗試使用環境變量
+                import os
+                os.environ['GROQ_API_KEY'] = GROQ_API_KEY
+                client = Groq()
+                print("Groq 客戶端通過環境變量初始化成功")
+                return client
+            except Exception as e2:
+                print(f"環境變量方法也失敗: {e2}")
+                # 方法3：返回模擬客戶端
+                print("使用模擬 Groq 客戶端")
+                return MockGroqClient()
         else:
+            print(f"其他初始化錯誤: {e}")
+            return MockGroqClient()
+    except Exception as e:
+        print(f"Groq 初始化失敗: {e}")
+        return MockGroqClient()
 
-            if (int(date[-9]) > 5):
-                response_content = '早餐'
-            else:
-                response_content = '宵夜'
+# 初始化客戶端
+client = initialize_groq_client()
 
-    return response_content
-
-
+# 其餘的程式碼保持不變...
+# [其餘的 route 和函數保持原樣]
 
 # otp_store = {}  # 暫存 OTP 驗證碼
 
@@ -98,49 +160,6 @@ def products_type(_type, date):
 #     print(f"[OTP] 已發送到 {email}: {otp}")  # 測試用印出
 
 #     return jsonify({'message': '驗證碼已發送，請在 5 分鐘內輸入'}), 200
-
-
-# @app.route('/verify_otp', methods=['POST'])
-# def verify_otp():
-#     data = request.get_json()
-#     email = data.get('email')
-#     otp = data.get('otp')
-
-#     if not email or not otp:
-#         return jsonify({'error': '缺少 email 或 otp'}), 400
-
-#     record = otp_store.get(email)
-#     if not record:
-#         return jsonify({'error': '未發送驗證碼或已過期'}), 400
-
-#     if datetime.utcnow() > record['expire']:
-#         otp_store.pop(email, None)
-#         return jsonify({'error': '驗證碼已過期'}), 400
-
-#     if record['otp'] != otp:
-#         return jsonify({'error': '驗證碼錯誤'}), 400
-
-#     return jsonify({'message': '驗證成功'}), 200
-
-
-# @app.route('/reset_password', methods=['POST'])
-# def reset_password():
-#     data = request.get_json()
-#     email = data.get('email')
-#     new_password = data.get('new_password')
-
-#     if not email or not new_password:
-#         return jsonify({'error': '缺少必要欄位'}), 400
-
-#     try:
-#         user = auth.get_user_by_email(email)
-#         auth.update_user(user.uid, password=new_password)
-#         return jsonify({'message': '密碼已成功重設'}), 200
-#     except Exception as e:
-#         return jsonify({'error': f'重設密碼失敗: {str(e)}'}), 400
-
-
-
 
 @app.route('/google_login', methods=['POST'])
 def google_login():
@@ -170,10 +189,6 @@ def google_login():
         print("Google login error:", e)
         return jsonify({'error': str(e)}), 400
 
-
-
-
-
 @app.route('/record_transaction', methods=['POST'])
 def record_transaction():
     try:
@@ -194,7 +209,6 @@ def record_transaction():
         amount = float(data.get('金額'))
         note = data.get('備註')
         user_id = data.get('user_id')
-
 
         # 寫入 Firestore
         doc_ref = db.collection('transactions').document()
@@ -353,7 +367,6 @@ def save_financial_goal():
         # 捕捉其他錯誤，回傳 400
         return jsonify({'error': str(e)}), 400
 
-
 @app.route('/get_financial_goals', methods=['POST'])
 def get_financial_goals():
     try:
@@ -462,9 +475,6 @@ def clear_all_saving_goals():
         print(f"清空儲蓄目標失敗: {str(e)}")
         return jsonify({'error': str(e)}), 400
 
-# 初始化 Groq 客戶端
-client = Groq(api_key=GROQ_API_KEY)
-
 # 角色 prompt
 role_prompts = {
     "狐狸": "請用機智、靈活、帶點狡猾感的語氣回覆，回覆的最後要加上“呵呵~”，像狐狸般聰明、擅長制定策略。投資型態偏向『積極型』，善於捕捉市場波動、靈活調整投資組合，但仍以專業且合理的金融知識回答問題。",
@@ -513,39 +523,44 @@ def chat():
     rag_text, chat_history_rag = call_rag_space(user_message, chat_history_rag)
 
     # -------- 3. GPT prompt：一次完成 RAG + 角色語氣 + 繁體中文回答 --------
-    conversation_history = [
-        {
-            "role": "user",
-            "content": (
-                f"{role_prompt} 根據以下資訊回答問題，"
-                f"保持簡短明確並使用繁體中文：\n\n{rag_text}\n\n問題：{user_message}"
-            )
-        }
-    ]
+    try:
+        conversation_history = [
+            {
+                "role": "user",
+                "content": (
+                    f"{role_prompt} 根據以下資訊回答問題，"
+                    f"保持簡短明確並使用繁體中文：\n\n{rag_text}\n\n問題：{user_message}"
+                )
+            }
+        ]
 
-    chat_completion = client.chat.completions.create(
-        messages=conversation_history,
-        model=model,
-    )
-    response_content = chat_completion.choices[0].message.content
+        chat_completion = client.chat.completions.create(
+            messages=conversation_history,
+            model=model,
+        )
+        response_content = chat_completion.choices[0].message.content
+    except Exception as e:
+        print(f"Groq API 呼叫失敗: {e}")
+        response_content = f"抱歉，目前無法提供AI回應。錯誤: {str(e)}"
 
     # -------- 4. 儲存對話紀錄 --------
-    user_ref = db.collection('chat').document(user_id)
-    user_ref.set({
-        'user_id': user_id,
-        'conversation': firestore.ArrayUnion([{
-            "timestamp": datetime.now(pytz.timezone('Asia/Taipei')),
-            "user_message": user_message,
-            "rag_context": rag_text,
-            "bot_response": response_content,
-            "role": selected_role
-        }])
-    }, merge=True)
+    try:
+        user_ref = db.collection('chat').document(user_id)
+        user_ref.set({
+            'user_id': user_id,
+            'conversation': firestore.ArrayUnion([{
+                "timestamp": datetime.now(pytz.timezone('Asia/Taipei')),
+                "user_message": user_message,
+                "rag_context": rag_text,
+                "bot_response": response_content,
+                "role": selected_role
+            }])
+        }, merge=True)
+    except Exception as e:
+        print(f"儲存對話紀錄失敗: {e}")
 
     # -------- 5. 返回最終繁體中文答案 --------
     return jsonify({'response': response_content})
-
-
 
 @app.route('/process_invoice', methods=['POST'])
 def process_invoice():
@@ -688,8 +703,6 @@ def process_invoice():
             print("\n超過最大重試次數，結束程序")
             return False
 
-
-
         def run(playwright: Playwright) -> None:
             browser = playwright.chromium.launch(
                 headless=False,
@@ -713,11 +726,9 @@ def process_invoice():
                 total += int(item[3])
                 products.append(f"品名:\n{item[0]} \n金額: {item[3]}\n\n")
 
-
             date = invoice_detail[0][0]
             company = invoice_detail[0][4]
             total = str(total)
-
 
             # 上傳資料庫
             db = firestore.client()
@@ -763,8 +774,6 @@ def process_invoice():
                         'user_id': user_id,
                     })
                     print('發票已存入記帳資料庫')
-
-
 
         with sync_playwright() as playwright:
             run(playwright)
