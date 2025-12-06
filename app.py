@@ -22,7 +22,7 @@ import traceback
 model="openai/gpt-oss-120b"
 
 app = Flask(__name__)
-CORS(app)  # 啟用跨域支援，否則 Flutter Web 會被擋
+CORS(app) # 啟用跨域支援，否則 Flutter Web 會被擋
 
 os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "pw-browsers"
 
@@ -845,4 +845,5 @@ def export_transactions():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+
 
