@@ -17,6 +17,7 @@ from flask import Flask, request, jsonify
 import requests
 import pytz
 from groq import Groq
+import traceback
 
 model="openai/gpt-oss-120b"
 
@@ -841,5 +842,6 @@ def export_transactions():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+
 
 
