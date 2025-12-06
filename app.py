@@ -619,8 +619,8 @@ def process_invoice():
             return result.strip()
 
         def fill_invoice_info(page):
-            page.goto("https://www.einvoice.nat.gov.tw/portal/btc/audit/btc601w/search", 
-                      timeout=60000, 
+            page.goto("https://www.einvoice.nat.gov.tw/portal/btc/audit/btc601w/search",
+                      timeout=60000,
                       wait_until='networkidle')
 
             today = datetime.today()
@@ -849,6 +849,7 @@ def export_transactions():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+
 
 
 
