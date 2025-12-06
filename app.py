@@ -775,7 +775,8 @@ def process_invoice():
 
     except Exception as e:
         # 捕捉錯誤以利除錯
-        print(f"錯誤：{e}")
+        print(f"PROCESS_INVOICE_ERROR: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/get_invoices', methods=['POST'])
@@ -840,4 +841,5 @@ def export_transactions():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+
 
