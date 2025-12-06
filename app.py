@@ -34,7 +34,7 @@ db = firestore.client()
 
 # 密碼長度驗證
 def is_valid_password(password):
-    return len(password) >= 6
+    return len(password) >= 6
 
 # Email 格式驗證
 def is_valid_email(email):
@@ -845,5 +845,6 @@ def export_transactions():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+
 
 
