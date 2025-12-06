@@ -617,7 +617,9 @@ def process_invoice():
             return result.strip()
 
         def fill_invoice_info(page):
-            page.goto("https://www.einvoice.nat.gov.tw/portal/btc/audit/btc601w/search")
+            page.goto("https://www.einvoice.nat.gov.tw/portal/btc/audit/btc601w/search",
+                      timeout=60000,
+                      wait_until='load')
 
             today = datetime.today()
             year_diff = today.year - date_obj.year
@@ -685,7 +687,7 @@ def process_invoice():
             except Exception as e:
                 print("流程中出現錯誤，將重新整理頁面再試一次：", e)
                 time.sleep(RETRY_INTERVAL)
-                page.reload()
+                page.reload(timeout=60000)
 
             print("\n超過最大重試次數，結束程序")
             return False
@@ -695,11 +697,12 @@ def process_invoice():
         def run(playwright: Playwright) -> None:
             browser = playwright.chromium.launch(
                 headless=True,
-                args=['--no-sandbox', '--disable-setuid-sandbox']
+                timeout=60000
             )
             context = browser.new_context()
             page = context.new_page()
 
+            page.set_default_timeout(60000)
 
             success = try_full_process_with_retry(page)
 
@@ -766,6 +769,7 @@ def process_invoice():
                         'user_id': user_id,
                     })
                     print('發票已存入記帳資料庫')
+                    
 
 
 
