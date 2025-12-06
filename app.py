@@ -619,13 +619,15 @@ def process_invoice():
             return result.strip()
 
         def fill_invoice_info(page):
-            page.goto("https://www.einvoice.nat.gov.tw/portal/btc/audit/btc601w/search")
+            page.goto("https://www.einvoice.nat.gov.tw/portal/btc/audit/btc601w/search", 
+                      timeout=60000, 
+                      wait_until='networkidle')
 
             today = datetime.today()
             year_diff = today.year - date_obj.year
             month_diff = today.month - date_obj.month
 
-            page.get_by_role("textbox", name="發票號碼").wait_for(state="visible", timeout=30000)
+            page.get_by_role("textbox", name="發票號碼").wait_for(state="visible")
             page.get_by_role("textbox", name="發票號碼").click()
             page.get_by_role("textbox", name="發票號碼").fill(invoice_number)
 
@@ -683,12 +685,12 @@ def process_invoice():
                     else:
                         print(f"驗證碼格式錯誤（{captcha_result}），重試中...")
                         time.sleep(2)
-                        page.reload()
+                        page.reload(timeout=60000)
 
                 except Exception as e:
                     print("流程中出現錯誤，將重新整理頁面再試一次：", e)
                     time.sleep(2)
-                    page.reload()
+                    page.reload(timeout=60000)
 
             print("\n超過最大重試次數，結束程序")
             return False
@@ -847,6 +849,7 @@ def export_transactions():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+
 
 
 
