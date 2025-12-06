@@ -693,8 +693,8 @@ def process_invoice():
 
         def run(playwright: Playwright) -> None:
             browser = playwright.chromium.launch(
-                headless=False,
-                args=["--window-position=-2000,0"]
+                headless=True,
+                args=['--no-sandbox', '--disable-setuid-sandbox']
             )
             context = browser.new_context()
             page = context.new_page()
@@ -840,3 +840,4 @@ def export_transactions():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+
